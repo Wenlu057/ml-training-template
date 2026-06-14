@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 
 
 class StockWindowDataset(Dataset):
@@ -20,12 +20,20 @@ class StockWindowDataset(Dataset):
         return torch.from_numpy(x), torch.tensor(y)
 
 
-def build_loader(parquet_path, batch_size=32, window=20, shuffle=True):
-    ds = StockWindowDataset(parquet_path, window=window)
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=4, drop_last=True)
+def build_train_val_loaders(parquet_path, window=20, batch_size=32, val_frac=0.2):
+    full_ds = StockWindowDataset(parquet_path, window=window)
+    n = len(full_ds)
+    split = int(n * (1 - val_frac))
+    train_ds = Subset(full_ds, range(0, split))
+    val_ds = Subset(full_ds, range(split, n))
+    train_loader = DataLoader(
+        train_ds, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True
+    )
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=4)
+    return train_loader, val_loader
 
 
 if __name__ == "__main__":
-    loader = build_loader("data/aapl_ge_psct.parquet")
-    xb, yb = next(iter(loader))
+    train_loader, val_loader = build_train_val_loaders("data/aapl_ge_psct.parquet")
+    xb, yb = next(iter(train_loader))
     print(xb.shape, yb.shape)
