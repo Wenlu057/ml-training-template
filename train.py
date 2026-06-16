@@ -1,8 +1,16 @@
+import argparse
+import os
+
 import torch
 import torch.nn as nn
 
 from dataset import build_train_val_loaders
 from model import MLP
+from utils import load_checkpoint, save_checkpoint
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--resume", action="store_true")
+args = parser.parse_args()
 
 EPOCHS = 50
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -12,7 +20,14 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-2)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 loss_fn = nn.MSELoss()
 
-for epoch in range(EPOCHS):
+start_epoch, best_val = 0, float("inf")
+patience, bad = 50, 0
+if args.resume and os.path.exists("last.pt"):
+    start_epoch, best_val = load_checkpoint("last.pt", model, optimizer, scheduler)
+    start_epoch += 1
+    print(f"resumed from epoch {start_epoch}")
+
+for epoch in range(start_epoch, EPOCHS):
     model.train()
     for xb, yb in train_loader:
         xb, yb = xb.to(device), yb.to(device)
@@ -33,10 +48,11 @@ for epoch in range(EPOCHS):
     val_loss /= len(val_loader.dataset)
     print(f"epoch {epoch} val_loss {val_loss:.5f} lr {scheduler.get_last_lr()[0]:.2e}")
 
-    best_val, patience, bad = float("inf"), 5, 0
+    save_checkpoint("last.pt", model, optimizer, scheduler, epoch, best_val)
+
     if val_loss < best_val:
         best_val, bad = val_loss, 0
-        torch.save(model.state_dict(), "best.pt")
+        save_checkpoint("best.pt", model, optimizer, scheduler, epoch, best_val)
     else:
         bad += 1
         if bad >= patience:
