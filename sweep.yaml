@@ -1,0 +1,11 @@
+method: bayes
+metric: {name: val_loss,goal: minimize}
+parameters:
+  lr: {min: 0.00001, max: 0.01}
+  weight_decay: {values: [0.0, 0.01, 0.1]}
+ 
+command:
+   - ${env}
+   - python
+   - train.py
+   - ${args}

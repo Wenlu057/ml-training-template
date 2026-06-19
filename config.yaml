@@ -1,0 +1,6 @@
+lr: 0.0003
+weight_decay: 0.01
+epochs: 50
+batch_size: 32
+window: 20
+patience: 50
