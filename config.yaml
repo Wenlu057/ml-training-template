@@ -4,3 +4,5 @@ epochs: 50
 batch_size: 32
 window: 20
 patience: 50
+use_amp: true
+accum_steps: 4

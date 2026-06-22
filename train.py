@@ -25,7 +25,7 @@ if args.lr is not None:
 if args.weight_decay is not None:
     cfg["weight_decay"] = args.weight_decay
 
-EPOCHS = 50
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 train_loader, val_loader = build_train_val_loaders(
     "data/aapl_ge_psct.parquet", cfg["window"], cfg["batch_size"]
@@ -54,19 +54,27 @@ if args.resume and os.path.exists("last.pt"):
     start_epoch, best_val = load_checkpoint("last.pt", model, optimizer, scheduler)
     start_epoch += 1
     print(f"resumed from epoch {start_epoch}")
+use_amp = cfg["use_amp"] and torch.cuda.is_available()
+accum_steps = cfg["accum_steps"]
+scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
-for epoch in range(start_epoch, EPOCHS):
+for epoch in range(start_epoch, cfg["epochs"]):
     model.train()
     train_loss = 0.0
-    for xb, yb in train_loader:
+    optimizer.zero_grad()
+    for i, (xb, yb) in enumerate(train_loader):
         xb, yb = xb.to(device), yb.to(device)
-        optimizer.zero_grad()
-        pred = model(xb)
-        loss = loss_fn(pred, yb)
-        loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
-        train_loss += loss.item() * len(xb)
+        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=use_amp):
+            pred = model(xb)
+            loss = loss_fn(pred, yb) / accum_steps
+        scaler.scale(loss).backward()
+        if (i + 1) % accum_steps == 0:
+            scaler.unscale_(optimizer)
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+        train_loss += loss.item() * len(xb) * accum_steps
     train_loss /= len(train_loader.dataset)
     scheduler.step()
 
@@ -83,7 +91,7 @@ for epoch in range(start_epoch, EPOCHS):
     val_loss /= len(val_loader.dataset)
     print(f"epoch {epoch} val_loss {val_loss:.5f} lr {scheduler.get_last_lr()[0]:.2e}")
 
-    if epoch == EPOCHS - 1 or epoch % 10 == 0:
+    if epoch == cfg["epochs"] - 1 or epoch % 10 == 0:
         y_true = torch.cat(y_true_list).numpy()
         y_pred = torch.cat(y_pred_list).numpy()
         fig, ax = plt.subplots()

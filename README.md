@@ -58,7 +58,17 @@ the outcome, and lower values consistently produced lower validation loss.
 ![Hyperparameter sweep](assets/sweep.png)
 
 
+## Throughput Benchmark
 
+Benchmarked training throughput across three configurations (50 batches, GPU-synced timing with warmup):
+
+| Config | Throughput (samples/sec) | vs baseline | Peak mem (GB) |
+|---|---|---|---|
+| baseline (fp32) | 9,986 | — | 0.02 |
+| + AMP | 10,931 | +9.5% | 0.02 |
+| + AMP + grad accum (×4) | 12,672 | +26.9% | 0.02 |
+
+AMP gave a modest +9.5% speedup and gradient accumulation pushed it to +27%. Peak memory stayed flat at 0.02 GB across all three — the MLP is tiny, so neither the Tensor-Core path nor the memory savings of AMP are meaningfully exercised here. The infrastructure is the deliverable; these techniques scale their benefit with model size, where AMP typically cuts memory substantially and speeds up large matmuls.
 ## Notes
 
 The demo task (predicting next-day returns) is close to a random walk, so absolute
