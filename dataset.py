@@ -1,6 +1,7 @@
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader, Dataset, Subset
+import torch.distributed as dist
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, Subset
 
 
 class StockWindowDataset(Dataset):
@@ -26,11 +27,18 @@ def build_train_val_loaders(parquet_path, window=20, batch_size=32, val_frac=0.2
     split = int(n * (1 - val_frac))
     train_ds = Subset(full_ds, range(0, split))
     val_ds = Subset(full_ds, range(split, n))
-    train_loader = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True
-    )
+    if dist.is_available() and dist.is_initialized():
+        train_sampler = DistributedSampler(train_ds)
+        train_loader = DataLoader(
+            train_ds, batch_size=batch_size, sampler=train_sampler, num_workers=4, drop_last=True
+        )
+    else:
+        train_sampler = None
+        train_loader = DataLoader(
+            train_ds, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True
+        )
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=4)
-    return train_loader, val_loader
+    return train_loader, val_loader, train_sampler
 
 
 if __name__ == "__main__":
