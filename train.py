@@ -99,6 +99,9 @@ for epoch in range(start_epoch, cfg["epochs"]):
             y_true_list.append(yb.cpu())
             y_pred_list.append(pred.cpu())
     val_loss /= len(val_loader.dataset)
+    val_loss_t = torch.tensor(val_loss, device=device)
+    dist.all_reduce(val_loss_t, op=dist.ReduceOp.SUM)
+    val_loss = val_loss_t.item() / dist.get_world_size()
     if is_main:
         print(f"epoch {epoch} val_loss {val_loss:.5f} lr {scheduler.get_last_lr()[0]:.2e}")
 
