@@ -58,7 +58,7 @@ the outcome, and lower values consistently produced lower validation loss.
 ![Hyperparameter sweep](assets/sweep.png)
 
 
-## Throughput Benchmark
+### Throughput Benchmark
 
 Benchmarked training throughput across three configurations (50 batches, GPU-synced timing with warmup):
 
@@ -69,6 +69,25 @@ Benchmarked training throughput across three configurations (50 batches, GPU-syn
 | + AMP + grad accum (×4) | 12,672 | +26.9% | 0.02 |
 
 AMP gave a modest +9.5% speedup and gradient accumulation pushed it to +27%. Peak memory stayed flat at 0.02 GB across all three — the MLP is tiny, so neither the Tensor-Core path nor the memory savings of AMP are meaningfully exercised here. The infrastructure is the deliverable; these techniques scale their benefit with model size, where AMP typically cuts memory substantially and speeds up large matmuls.
+
+### Profiling
+
+Profiled the training loop with `torch.profiler`, comparing single-process vs
+multi-worker data loading:
+
+| Config | CPU time (20 steps) | CUDA time |
+|---|---|---|
+| baseline (num_workers=0) | 183 ms | 1.62 ms |
+| + 4 workers + pin_memory | 41 ms | 1.62 ms |
+
+![Profiler trace timeline](assets/trace.png)
+
+The CUDA time is identical (~1.6 ms) while CPU time drops 4×. This makes the
+bottleneck clear: with a tiny MLP, GPU compute finishes in microseconds, so the
+workload is **input-bound** — the GPU sits idle waiting on the data pipeline, not
+computing. Multi-worker loading + pinned memory cut the host-side overhead
+substantially; further GPU optimization (AMP, larger batches) gives little here
+because compute was never the constraint.
 ## Notes
 
 The demo task (predicting next-day returns) is close to a random walk, so absolute

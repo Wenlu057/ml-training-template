@@ -20,16 +20,25 @@ class StockWindowDataset(Dataset):
         return torch.from_numpy(x), torch.tensor(y)
 
 
-def build_train_val_loaders(parquet_path, window=20, batch_size=32, val_frac=0.2):
+def build_train_val_loaders(
+    parquet_path,
+    window=20,
+    batch_size=32,
+    val_frac=0.2,
+    num_workers=4,
+    pin_memory=False,
+):
     full_ds = StockWindowDataset(parquet_path, window=window)
     n = len(full_ds)
     split = int(n * (1 - val_frac))
     train_ds = Subset(full_ds, range(0, split))
     val_ds = Subset(full_ds, range(split, n))
     train_loader = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True
+        train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True
     )
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=4)
+    val_loader = DataLoader(
+        val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory
+    )
     return train_loader, val_loader
 
 
